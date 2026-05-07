@@ -4,8 +4,8 @@ const boostCheckbox = document.getElementById("boost-checkbox");
 const resetAllBtn = document.getElementById("reset-all");
 
 let boostEnabled = false;
-let tabVolumes = {}; // { tabId: { volume: 0.0-6.0, muted: bool } }
-let sitePresets = {}; // { hostname: { volume: 0.0-6.0, muted: bool } }
+let tabVolumes = {};
+let sitePresets = {};
 let isInteracting = false;
 let currentTabIds = [];
 
@@ -21,6 +21,16 @@ async function loadSettings() {
 // Save settings to storage
 async function saveSettings() {
     await chrome.storage.local.set({ boostEnabled, tabVolumes, sitePresets });
+}
+
+// Extract hostname from URL
+function getHostname(url) {
+    if (!url) return null;
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return null;
+    }
 }
 
 // Get volume icon SVG based on level and mute state
@@ -47,8 +57,39 @@ function getVolumeIcon(volume, muted) {
 
 // Render a single tab row
 function createTabRow(tab) {
-    const settings = tabVolumes[tab.id] || { volume: 1.0, muted: false };
+    const hostname = getHostname(tab.url);
+    const preset = hostname ? sitePresets[hostname] : null;
+    let isNewTab = false;
+
+    // Use existing tab volume, or site preset, or default
+    if (!tabVolumes[tab.id]) {
+        isNewTab = true;
+        if (preset) {
+            tabVolumes[tab.id] = { volume: preset.volume, muted: preset.muted };
+        } else {
+            tabVolumes[tab.id] = { volume: 1.0, muted: false };
+        }
+    }
+
+    const settings = tabVolumes[tab.id];
     const maxValue = boostEnabled ? 5.0 : 1.0;
+
+    // Apply preset to newly discovered tabs
+    if (isNewTab && preset) {
+        chrome.runtime.sendMessage({
+            type: "SET_VOLUME",
+            tabId: tab.id,
+            volume: settings.muted ? 0 : settings.volume
+        });
+
+        if (settings.muted) {
+            chrome.runtime.sendMessage({
+                type: "SET_MUTE",
+                tabId: tab.id,
+                muted: true
+            });
+        }
+    }
 
     // Clamp volume to current max
     if (settings.volume > maxValue) {
@@ -63,9 +104,9 @@ function createTabRow(tab) {
     row.innerHTML = `
     <img 
       class="tab-favicon" 
-      src="${tab.favIconUrl || "icons/icon16-light.png"}" 
+      src="${tab.favIconUrl || chrome.runtime.getURL("icons/icon16-light.png")}" 
       alt=""
-      onerror="this.src='icons/icon16-light.png'"
+      onerror="this.src='${chrome.runtime.getURL("icons/icon16-light.png")}'"
     >
     <div class="tab-info">
       <div class="tab-title" title="${tab.title}">${tab.title}</div>
@@ -105,6 +146,11 @@ function createTabRow(tab) {
         label.textContent = `${Math.round(volume * 100)}%`;
         muteBtn.replaceChildren(getVolumeIcon(volume, settings.muted));
 
+        // Save as site preset
+        if (hostname) {
+            sitePresets[hostname] = { volume: settings.volume, muted: settings.muted };
+        }
+
         chrome.runtime.sendMessage({
             type: "SET_VOLUME",
             tabId: tab.id,
@@ -120,6 +166,11 @@ function createTabRow(tab) {
         tabVolumes[tab.id] = settings;
         muteBtn.replaceChildren(getVolumeIcon(settings.volume, settings.muted));
         muteBtn.title = settings.muted ? "Unmute" : "Mute";
+
+        // Save as site preset
+        if (hostname) {
+            sitePresets[hostname] = { volume: settings.volume, muted: settings.muted };
+        }
 
         chrome.runtime.sendMessage({
             type: "SET_MUTE",
@@ -152,8 +203,6 @@ function renderTabs(tabs) {
 }
 
 // Fetch audible tabs and render
-let currentTabIds = [];
-
 async function refreshTabs(force = false) {
     if (isInteracting) return;
 
@@ -194,14 +243,10 @@ function resetAll() {
     });
 }
 
-// Reset all button handler
-resetAllBtn.addEventListener("click", resetAll);
-
 // Boost toggle handler
 boostCheckbox.addEventListener("change", (e) => {
     boostEnabled = e.target.checked;
 
-    // If boost was disabled, clamp all volumes to 1.0 and notify tabs
     if (!boostEnabled) {
         Object.keys(tabVolumes).forEach(tabId => {
             if (tabVolumes[tabId].volume > 1.0) {
@@ -219,6 +264,9 @@ boostCheckbox.addEventListener("change", (e) => {
     saveSettings();
     refreshTabs(true);
 });
+
+// Reset all button handler
+resetAllBtn.addEventListener("click", resetAll);
 
 // Update extension icon based on current theme
 function updateExtensionIcon() {

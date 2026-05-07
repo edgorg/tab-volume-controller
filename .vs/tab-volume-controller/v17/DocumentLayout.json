@@ -7,6 +7,14 @@
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:popup\\popup.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
     },
     {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|G:\\code\\tab-volume-controller\\content\\content-script.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:content\\content-script.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|G:\\code\\tab-volume-controller\\popup\\popup.html||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:popup\\popup.html||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|G:\\code\\tab-volume-controller\\background\\service-worker.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:background\\service-worker.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
     },
@@ -15,16 +23,8 @@
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:popup\\popup.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|G:\\code\\tab-volume-controller\\popup\\popup.html||{40D31677-CBC0-4297-A9EF-89D907823A98}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:popup\\popup.html||{40D31677-CBC0-4297-A9EF-89D907823A98}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|G:\\code\\tab-volume-controller\\manifest.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:manifest.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|G:\\code\\tab-volume-controller\\content\\content-script.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:content\\content-script.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
     }
   ],
   "DocumentGroupContainers": [
@@ -38,7 +38,7 @@
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 5,
               "Title": "manifest.json",
               "DocumentMoniker": "G:\\code\\tab-volume-controller\\manifest.json",
               "RelativeDocumentMoniker": "manifest.json",
@@ -46,12 +46,11 @@
               "RelativeToolTip": "manifest.json",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAsAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2026-05-07T16:27:32.938Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-05-07T16:27:32.938Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 4,
               "Title": "popup.css",
               "DocumentMoniker": "G:\\code\\tab-volume-controller\\popup\\popup.css",
               "RelativeDocumentMoniker": "popup\\popup.css",
@@ -59,25 +58,24 @@
               "RelativeToolTip": "popup\\popup.css",
               "ViewState": "AgIAAFkAAAAAAAAAAAAQwFYAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003000|",
-              "WhenOpened": "2026-05-07T14:23:11.951Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-05-07T14:23:11.951Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
               "Title": "service-worker.js",
               "DocumentMoniker": "G:\\code\\tab-volume-controller\\background\\service-worker.js",
               "RelativeDocumentMoniker": "background\\service-worker.js",
               "ToolTip": "G:\\code\\tab-volume-controller\\background\\service-worker.js",
               "RelativeToolTip": "background\\service-worker.js",
-              "ViewState": "AgIAADEAAAAAAAAAAAAqwFEAAAAYAAAAAAAAAA==",
+              "ViewState": "AgIAAE0AAAAAAAAAAAAAwKIAAAADAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
               "WhenOpened": "2026-05-07T14:17:13.399Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 2,
               "Title": "popup.html",
               "DocumentMoniker": "G:\\code\\tab-volume-controller\\popup\\popup.html",
               "RelativeDocumentMoniker": "popup\\popup.html",
@@ -90,13 +88,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 1,
               "Title": "content-script.js",
               "DocumentMoniker": "G:\\code\\tab-volume-controller\\content\\content-script.js",
               "RelativeDocumentMoniker": "content\\content-script.js",
               "ToolTip": "G:\\code\\tab-volume-controller\\content\\content-script.js",
               "RelativeToolTip": "content\\content-script.js",
-              "ViewState": "AgIAACEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAF4AAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
               "WhenOpened": "2026-05-07T13:56:09.562Z",
               "EditorCaption": ""
@@ -109,7 +107,7 @@
               "RelativeDocumentMoniker": "popup\\popup.js",
               "ToolTip": "G:\\code\\tab-volume-controller\\popup\\popup.js",
               "RelativeToolTip": "popup\\popup.js",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAAnAAAAAAAAAA==",
+              "ViewState": "AgIAACEAAAAAAAAAAADwvy8AAAAbAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
               "WhenOpened": "2026-05-07T13:51:43.478Z",
               "EditorCaption": ""

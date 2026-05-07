@@ -2,9 +2,10 @@
   "ExpandedNodes": [
     "",
     "\\background",
+    "\\content",
     "\\icons",
     "\\popup"
   ],
-  "SelectedNode": "\\icons",
+  "SelectedNode": "\\background\\service-worker.js",
   "PreviewInSolutionExplorer": false
 }

@@ -4,6 +4,9 @@ const injectedTabs = new Set();
 // Track tabs we're actively managing
 const managedTabs = new Set();
 
+// Track tabs that have had presets applied
+const presetAppliedTabs = new Set();
+
 // --- Icon Theming ---
 
 function updateIcon(isDark) {
@@ -40,18 +43,58 @@ async function ensureContentScript(tabId) {
     }
 }
 
+// --- Preset Application ---
+
+async function applyPresetToTab(tab) {
+    if (presetAppliedTabs.has(tab.id)) return;
+
+    const data = await chrome.storage.local.get(["sitePresets"]);
+    const sitePresets = data.sitePresets || {};
+
+    let hostname = null;
+    try {
+        hostname = new URL(tab.url).hostname;
+    } catch {
+        return;
+    }
+
+    const preset = sitePresets[hostname];
+    if (!preset) return;
+
+    presetAppliedTabs.add(tab.id);
+
+    await ensureContentScript(tab.id);
+
+    // Small delay to let content script initialize
+    setTimeout(() => {
+        chrome.tabs.sendMessage(tab.id, {
+            type: "SET_VOLUME",
+            volume: preset.muted ? 0 : preset.volume
+        });
+
+        if (preset.muted) {
+            chrome.tabs.sendMessage(tab.id, {
+                type: "SET_MUTE",
+                muted: true
+            });
+        }
+    }, 100);
+}
+
 // --- Tab Tracking ---
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.audible === true) {
         managedTabs.add(tabId);
         ensureContentScript(tabId);
+        applyPresetToTab(tab);
     }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
     injectedTabs.delete(tabId);
     managedTabs.delete(tabId);
+    presetAppliedTabs.delete(tabId);
 });
 
 // --- Message Handling ---
