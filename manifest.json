@@ -1,0 +1,36 @@
+{
+    "manifest_version": 3,
+    "name": "Levels - Tab Volume Mixer",
+    "version": "1.0.0",
+    "description": "Control the volume of individual browser tabs",
+    "permissions": [
+        "tabs",
+        "storage",
+        "scripting"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "action": {
+        "default_popup": "popup/popup.html",
+        "default_icon": {
+            "16": "icons/icon16-light.png",
+            "48": "icons/icon48-light.png",
+            "128": "icons/icon128-light.png"
+        }
+    },
+    "background": {
+        "service_worker": "background/service-worker.js"
+    },
+    "icons": {
+        "16": "icons/icon16-light.png",
+        "48": "icons/icon48-light.png",
+        "128": "icons/icon128-light.png"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [ "icons/*" ],
+            "matches": [ "<all_urls>" ]
+        }
+    ]
+}
