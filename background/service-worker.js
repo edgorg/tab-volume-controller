@@ -69,17 +69,16 @@ async function applyVolumeToTab(tab) {
 
     // Small delay to let content script initialize
     setTimeout(() => {
+        // Always send both volume and mute state so content script is fully in sync
         chrome.tabs.sendMessage(tab.id, {
-            type: "SET_VOLUME",
-            volume: settings.muted ? 0 : settings.volume
+            type: "SET_MUTE",
+            muted: settings.muted
         });
 
-        if (settings.muted) {
-            chrome.tabs.sendMessage(tab.id, {
-                type: "SET_MUTE",
-                muted: true
-            });
-        }
+        chrome.tabs.sendMessage(tab.id, {
+            type: "SET_VOLUME",
+            volume: settings.volume
+        });
     }, 100);
 }
 

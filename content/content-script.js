@@ -47,14 +47,8 @@ if (window.__levelsInjected) {
             const result = getOrCreateGain(element);
             if (!result) return;
 
-            const { gainNode, audioContext } = result;
-            const targetVolume = isMuted ? 0 : currentVolume;
-
-            gainNode.gain.cancelScheduledValues(audioContext.currentTime);
-            gainNode.gain.linearRampToValueAtTime(
-                targetVolume,
-                audioContext.currentTime + 0.2
-            );
+            const { gainNode } = result;
+            gainNode.gain.value = isMuted ? 0 : currentVolume;
         });
     }
 

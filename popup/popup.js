@@ -1,32 +1,43 @@
 const tabList = document.getElementById("tab-list");
 const emptyState = document.getElementById("empty-state");
 const boostCheckbox = document.getElementById("boost-checkbox");
+const superBoostCheckbox = document.getElementById("super-boost-checkbox");
 const presetsCheckbox = document.getElementById("presets-checkbox");
 const resetAllBtn = document.getElementById("reset-all");
 const settingsBtn = document.getElementById("settings-btn");
 const settingsDropdown = document.getElementById("settings-dropdown");
 
 let boostEnabled = false;
+let superBoostEnabled = false;
 let presetsEnabled = true;
 let tabVolumes = {};
 let sitePresets = {};
 let isInteracting = false;
 let currentTabIds = [];
 
+// Get current max volume multiplier
+function getMaxValue() {
+    if (superBoostEnabled) return 10.0;
+    if (boostEnabled) return 2.0;
+    return 1.0;
+}
+
 // Load saved settings from storage
 async function loadSettings() {
-    const data = await chrome.storage.local.get(["boostEnabled", "presetsEnabled", "tabVolumes", "sitePresets"]);
+    const data = await chrome.storage.local.get(["boostEnabled", "superBoostEnabled", "presetsEnabled", "tabVolumes", "sitePresets"]);
     boostEnabled = data.boostEnabled || false;
+    superBoostEnabled = data.superBoostEnabled || false;
     presetsEnabled = data.presetsEnabled !== false;
     tabVolumes = data.tabVolumes || {};
     sitePresets = data.sitePresets || {};
     boostCheckbox.checked = boostEnabled;
+    superBoostCheckbox.checked = superBoostEnabled;
     presetsCheckbox.checked = presetsEnabled;
 }
 
 // Save settings to storage
 async function saveSettings() {
-    await chrome.storage.local.set({ boostEnabled, presetsEnabled, tabVolumes, sitePresets });
+    await chrome.storage.local.set({ boostEnabled, superBoostEnabled, presetsEnabled, tabVolumes, sitePresets });
 }
 
 // Extract hostname from URL
@@ -78,7 +89,7 @@ function createTabRow(tab) {
     }
 
     const settings = tabVolumes[tab.id];
-    const maxValue = boostEnabled ? 5.0 : 1.0;
+    const maxValue = getMaxValue();
 
     // Apply preset to newly discovered tabs
     if (isNewTab && preset && presetsEnabled) {
@@ -254,6 +265,21 @@ function resetAll() {
     });
 }
 
+// Clamp volumes when boost level is reduced
+function clampVolumes(maxValue) {
+    Object.keys(tabVolumes).forEach(tabId => {
+        if (tabVolumes[tabId].volume > maxValue) {
+            tabVolumes[tabId].volume = maxValue;
+
+            chrome.runtime.sendMessage({
+                type: "SET_VOLUME",
+                tabId: parseInt(tabId),
+                volume: tabVolumes[tabId].muted ? 0 : maxValue
+            });
+        }
+    });
+}
+
 // Settings dropdown toggle
 settingsBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -289,18 +315,28 @@ presetsCheckbox.addEventListener("change", (e) => {
 boostCheckbox.addEventListener("change", (e) => {
     boostEnabled = e.target.checked;
 
+    // If boost disabled, also disable super boost
     if (!boostEnabled) {
-        Object.keys(tabVolumes).forEach(tabId => {
-            if (tabVolumes[tabId].volume > 1.0) {
-                tabVolumes[tabId].volume = 1.0;
+        superBoostEnabled = false;
+        superBoostCheckbox.checked = false;
+        clampVolumes(1.0);
+    }
 
-                chrome.runtime.sendMessage({
-                    type: "SET_VOLUME",
-                    tabId: parseInt(tabId),
-                    volume: tabVolumes[tabId].muted ? 0 : 1.0
-                });
-            }
-        });
+    saveSettings();
+    refreshTabs(true);
+});
+
+// Super boost toggle handler
+superBoostCheckbox.addEventListener("change", (e) => {
+    superBoostEnabled = e.target.checked;
+
+    // If super boost enabled, also enable regular boost
+    if (superBoostEnabled) {
+        boostEnabled = true;
+        boostCheckbox.checked = true;
+    } else {
+        // Clamp to regular boost max
+        clampVolumes(2.0);
     }
 
     saveSettings();
