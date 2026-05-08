@@ -46,9 +46,10 @@ async function ensureContentScript(tabId) {
 // --- Volume Application ---
 
 async function applyVolumeToTab(tab) {
-    const data = await chrome.storage.local.get(["tabVolumes", "sitePresets"]);
+    const data = await chrome.storage.local.get(["tabVolumes", "sitePresets", "presetsEnabled"]);
     const tabVolumes = data.tabVolumes || {};
     const sitePresets = data.sitePresets || {};
+    const presetsEnabled = data.presetsEnabled !== false;
 
     let hostname = null;
     try {
@@ -57,9 +58,9 @@ async function applyVolumeToTab(tab) {
         return;
     }
 
-    // Check for existing tab volume first, then site preset
+    // Check for existing tab volume first, then site preset (if enabled)
     const tabSettings = tabVolumes[tab.id];
-    const sitePreset = hostname ? sitePresets[hostname] : null;
+    const sitePreset = (hostname && presetsEnabled) ? sitePresets[hostname] : null;
     const settings = tabSettings || sitePreset;
 
     if (!settings) return;

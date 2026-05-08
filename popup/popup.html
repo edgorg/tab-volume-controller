@@ -8,19 +8,24 @@
 </head>
 <body>
   <div class="container">
-    <header class="header">
-        <h1>Levels</h1>
-        <div class="header-controls">
-            <button class="reset-all-btn" id="reset-all" title="Reset all tabs to 100%">
-                Reset all
-            </button>
-            <label class="toggle-switch" title="Enable volume boost (500%)">
-                <input type="checkbox" id="boost-checkbox">
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">Boost</span>
-            </label>
-        </div>
-    </header> 
+      <header class="header">
+          <h1>Levels</h1>
+          <div class="header-controls">
+              <button class="reset-all-btn" id="reset-all" title="Reset all tabs to 100%">
+                  Reset all
+              </button>
+              <label class="toggle-switch" title="Remember site volume you previously set">
+                  <input type="checkbox" id="presets-checkbox">
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-label">Remember</span>
+              </label>
+              <label class="toggle-switch" title="Enable volume boost (500%)">
+                  <input type="checkbox" id="boost-checkbox">
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-label">Boost</span>
+              </label>
+          </div>
+      </header>
 
     <div id="tab-list" class="tab-list">
       <!-- Tabs will be injected here by popup.js -->

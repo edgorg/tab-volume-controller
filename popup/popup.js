@@ -1,9 +1,11 @@
 const tabList = document.getElementById("tab-list");
 const emptyState = document.getElementById("empty-state");
 const boostCheckbox = document.getElementById("boost-checkbox");
+const presetsCheckbox = document.getElementById("presets-checkbox");
 const resetAllBtn = document.getElementById("reset-all");
 
 let boostEnabled = false;
+let presetsEnabled = true;
 let tabVolumes = {};
 let sitePresets = {};
 let isInteracting = false;
@@ -11,16 +13,18 @@ let currentTabIds = [];
 
 // Load saved settings from storage
 async function loadSettings() {
-    const data = await chrome.storage.local.get(["boostEnabled", "tabVolumes", "sitePresets"]);
+    const data = await chrome.storage.local.get(["boostEnabled", "presetsEnabled", "tabVolumes", "sitePresets"]);
     boostEnabled = data.boostEnabled || false;
+    presetsEnabled = data.presetsEnabled !== false; // Default to true
     tabVolumes = data.tabVolumes || {};
     sitePresets = data.sitePresets || {};
     boostCheckbox.checked = boostEnabled;
+    presetsCheckbox.checked = presetsEnabled;
 }
 
 // Save settings to storage
 async function saveSettings() {
-    await chrome.storage.local.set({ boostEnabled, tabVolumes, sitePresets });
+    await chrome.storage.local.set({ boostEnabled, presetsEnabled, tabVolumes, sitePresets });
 }
 
 // Extract hostname from URL
@@ -64,7 +68,7 @@ function createTabRow(tab) {
     // Use existing tab volume, or site preset, or default
     if (!tabVolumes[tab.id]) {
         isNewTab = true;
-        if (preset) {
+        if (preset && presetsEnabled) {
             tabVolumes[tab.id] = { volume: preset.volume, muted: preset.muted };
         } else {
             tabVolumes[tab.id] = { volume: 1.0, muted: false };
@@ -147,7 +151,7 @@ function createTabRow(tab) {
         muteBtn.replaceChildren(getVolumeIcon(volume, settings.muted));
 
         // Save as site preset
-        if (hostname) {
+        if (hostname && presetsEnabled) {
             sitePresets[hostname] = { volume: settings.volume, muted: settings.muted };
         }
 
@@ -168,7 +172,7 @@ function createTabRow(tab) {
         muteBtn.title = settings.muted ? "Unmute" : "Mute";
 
         // Save as site preset
-        if (hostname) {
+        if (hostname && presetsEnabled) {
             sitePresets[hostname] = { volume: settings.volume, muted: settings.muted };
         }
 
@@ -249,6 +253,9 @@ function resetAll() {
     });
 }
 
+// Reset all button handler
+resetAllBtn.addEventListener("click", resetAll);
+
 // Boost toggle handler
 boostCheckbox.addEventListener("change", (e) => {
     boostEnabled = e.target.checked;
@@ -271,8 +278,11 @@ boostCheckbox.addEventListener("change", (e) => {
     refreshTabs(true);
 });
 
-// Reset all button handler
-resetAllBtn.addEventListener("click", resetAll);
+// Presets toggle handler
+presetsCheckbox.addEventListener("change", (e) => {
+    presetsEnabled = e.target.checked;
+    saveSettings();
+});
 
 // Update extension icon based on current theme
 function updateExtensionIcon() {
