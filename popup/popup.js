@@ -128,17 +128,18 @@ function createTabRow(tab) {
     <div class="tab-info">
       <div class="tab-title" title="${tab.title}">${tab.title}</div>
       <div class="slider-row">
-        <input 
-          type="range" 
-          class="volume-slider" 
-          min="0" 
-          max="${maxValue * 100}" 
-          value="${settings.volume * 100}"
+        <input
+         type="range"
+         class="volume-slider"
+         min="0"
+         max="${maxValue * 100}" 
+         value="${settings.volume * 100}"
+         aria-label="Volume for ${tab.title}"
         >
         <span class="volume-label">${percentDisplay}%</span>
       </div>
     </div>
-    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}">
+    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}" aria-label="${settings.muted ? "Unmute" : "Mute"} ${tab.title}">
     </button>
   `;
 
@@ -191,6 +192,7 @@ function createTabRow(tab) {
         tabVolumes[tab.id] = settings;
         muteBtn.replaceChildren(getVolumeIcon(settings.volume, settings.muted));
         muteBtn.title = settings.muted ? "Unmute" : "Mute";
+        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${tab.title}`);
 
         // Save as site preset
         if (hostname && presetsEnabled) {
@@ -292,6 +294,24 @@ function clampVolumes(maxValue) {
 settingsBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     settingsDropdown.classList.toggle("hidden");
+    const isOpen = !settingsDropdown.classList.contains("hidden");
+    settingsBtn.setAttribute("aria-expanded", isOpen);
+});
+
+// Allow Escape to close settings dropdown
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !settingsDropdown.classList.contains("hidden")) {
+        settingsDropdown.classList.add("hidden");
+        settingsBtn.focus();
+    }
+});
+
+// Allow Enter/Space to toggle settings button
+settingsBtn.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        settingsBtn.click();
+    }
 });
 
 // Close dropdown when clicking outside
