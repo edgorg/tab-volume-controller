@@ -147,6 +147,13 @@ function createTabRow(tab) {
     const label = row.querySelector(".volume-label");
     const muteBtn = row.querySelector(".mute-btn");
 
+    // Update slider fill colour
+    function updateSliderFill() {
+        const percent = (slider.value / slider.max) * 100;
+        slider.style.setProperty("--fill-percent", `${percent}%`);
+    }
+    updateSliderFill();
+
     // Set initial icon
     muteBtn.appendChild(getVolumeIcon(settings.volume, settings.muted));
 
@@ -161,6 +168,7 @@ function createTabRow(tab) {
         settings.volume = volume;
         tabVolumes[tab.id] = settings;
         label.textContent = `${Math.round(volume * 100)}%`;
+        updateSliderFill();
         muteBtn.replaceChildren(getVolumeIcon(volume, settings.muted));
 
         // Save as site preset

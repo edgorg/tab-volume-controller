@@ -345,10 +345,10 @@ body {
     appearance: none;
     height: 4px;
     border-radius: 2px;
-    background: var(--slider-track);
     outline: none;
     cursor: pointer;
     transition: opacity 0.15s ease;
+    background: linear-gradient( to right, var(--accent) 0%, var(--accent) var(--fill-percent, 100%), var(--slider-track) var(--fill-percent, 100%), var(--slider-track) 100% );
 }
 
     .volume-slider:hover {
