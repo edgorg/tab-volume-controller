@@ -208,6 +208,16 @@ function createTabRow(tab) {
         saveSettings();
     });
 
+    // Double-click to switch to tab
+    row.addEventListener("dblclick", () => {
+        chrome.tabs.update(tab.id, { active: true });
+        chrome.tabs.get(tab.id, (t) => {
+            if (t.windowId) {
+                chrome.windows.update(t.windowId, { focused: true });
+            }
+        });
+    });
+
     return row;
 }
 
