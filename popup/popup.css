@@ -451,3 +451,10 @@ body {
 .hidden {
     display: none;
 }
+
+.empty-state-icon {
+    width: 32px;
+    height: 32px;
+    fill: var(--border);
+    margin-bottom: 8px;
+}
