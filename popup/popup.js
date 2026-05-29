@@ -6,6 +6,10 @@ const presetsCheckbox = document.getElementById("presets-checkbox");
 const resetAllBtn = document.getElementById("reset-all");
 const settingsBtn = document.getElementById("settings-btn");
 const settingsDropdown = document.getElementById("settings-dropdown");
+const savedSitesSection = document.getElementById("saved-sites-section");
+const savedSitesToggle = document.getElementById("saved-sites-toggle");
+const savedSitesArrow = document.getElementById("saved-sites-arrow");
+const savedSitesList = document.getElementById("saved-sites-list");
 
 let boostEnabled = false;
 let superBoostEnabled = false;
@@ -14,6 +18,7 @@ let tabVolumes = {};
 let sitePresets = {};
 let isInteracting = false;
 let currentTabIds = [];
+let savedSitesCollapsed = true;
 
 // Get current max volume multiplier
 function getMaxValue() {
@@ -24,12 +29,13 @@ function getMaxValue() {
 
 // Load saved settings from storage
 async function loadSettings() {
-    const data = await chrome.storage.local.get(["boostEnabled", "superBoostEnabled", "presetsEnabled", "tabVolumes", "sitePresets"]);
+    const data = await chrome.storage.local.get(["boostEnabled", "superBoostEnabled", "presetsEnabled", "tabVolumes", "sitePresets", "savedSitesCollapsed"]);
     boostEnabled = data.boostEnabled || false;
     superBoostEnabled = data.superBoostEnabled || false;
     presetsEnabled = data.presetsEnabled !== false;
     tabVolumes = data.tabVolumes || {};
     sitePresets = data.sitePresets || {};
+    savedSitesCollapsed = data.savedSitesCollapsed || false;
     boostCheckbox.checked = boostEnabled;
     superBoostCheckbox.checked = superBoostEnabled;
     presetsCheckbox.checked = presetsEnabled;
@@ -67,6 +73,19 @@ function getVolumeIcon(volume, muted) {
     } else {
         path.setAttribute("d", "M560-131v-82q90-26 145-100t55-168q0-94-55-168T560-749v-82q124 28 202 125.5T840-481q0 127-78 224.5T560-131ZM120-360v-240h160l200-200v640L280-360H120Zm440 40v-322q47 22 73.5 66t26.5 96q0 51-26.5 94.5T640-320Z");
     }
+
+    svg.appendChild(path);
+    return svg;
+}
+
+// Get delete icon SVG
+function getDeleteIcon() {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "icon");
+    svg.setAttribute("viewBox", "0 -960 960 960");
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z");
 
     svg.appendChild(path);
     return svg;
@@ -221,6 +240,204 @@ function createTabRow(tab) {
     return row;
 }
 
+// Create a saved site row
+function createSavedSiteRow(hostname, preset) {
+    const maxValue = getMaxValue();
+    const settings = { volume: preset.volume, muted: preset.muted };
+
+    // Clamp volume to current max
+    if (settings.volume > maxValue) {
+        settings.volume = maxValue;
+    }
+
+    const row = document.createElement("div");
+    row.className = "saved-site-row";
+
+    const percentDisplay = Math.round(settings.volume * 100);
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+
+    row.innerHTML = `
+    <img 
+      class="saved-site-favicon" 
+      src="${faviconUrl}" 
+      alt=""
+      onerror="this.src='${chrome.runtime.getURL("icons/icon16-light.png")}'"
+    >
+    <div class="saved-site-info">
+      <div class="saved-site-hostname" title="${hostname}">${hostname}</div>
+      <div class="slider-row">
+        <input
+         type="range"
+         class="volume-slider"
+         min="0"
+         max="${maxValue * 100}" 
+         value="${settings.volume * 100}"
+         aria-label="Volume for ${hostname}"
+        >
+        <span class="volume-label">${percentDisplay}%</span>
+      </div>
+    </div>
+    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}" aria-label="${settings.muted ? "Unmute" : "Mute"} ${hostname}">
+    </button>
+    <button class="delete-preset-btn" title="Remove saved preset" aria-label="Remove preset for ${hostname}">
+    </button>
+  `;
+
+    const slider = row.querySelector(".volume-slider");
+    const label = row.querySelector(".volume-label");
+    const muteBtn = row.querySelector(".mute-btn");
+    const deleteBtn = row.querySelector(".delete-preset-btn");
+
+    // Update slider fill
+    function updateSliderFill() {
+        const percent = (slider.value / slider.max) * 100;
+        slider.style.setProperty("--fill-percent", `${percent}%`);
+    }
+    updateSliderFill();
+
+    // Set icons
+    muteBtn.appendChild(getVolumeIcon(settings.volume, settings.muted));
+    deleteBtn.appendChild(getDeleteIcon());
+
+    // Track interaction
+    slider.addEventListener("mousedown", () => { isInteracting = true; });
+    slider.addEventListener("mouseup", () => { isInteracting = false; });
+    slider.addEventListener("mouseleave", () => { isInteracting = false; });
+
+    // Slider input handler
+    slider.addEventListener("input", (e) => {
+        const volume = parseInt(e.target.value) / 100;
+        settings.volume = volume;
+        sitePresets[hostname] = { volume: settings.volume, muted: settings.muted };
+        label.textContent = `${Math.round(volume * 100)}%`;
+        updateSliderFill();
+        muteBtn.replaceChildren(getVolumeIcon(volume, settings.muted));
+
+        // Also update any active tabs with this hostname
+        applyPresetToActiveTabs(hostname, settings);
+        saveSettings();
+    });
+
+    // Mute button handler
+    muteBtn.addEventListener("click", () => {
+        settings.muted = !settings.muted;
+        sitePresets[hostname] = { volume: settings.volume, muted: settings.muted };
+        muteBtn.replaceChildren(getVolumeIcon(settings.volume, settings.muted));
+        muteBtn.title = settings.muted ? "Unmute" : "Mute";
+        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${hostname}`);
+
+        // Also update any active tabs with this hostname
+        applyPresetToActiveTabs(hostname, settings);
+        saveSettings();
+    });
+
+    // Delete button handler
+    deleteBtn.addEventListener("click", () => {
+        delete sitePresets[hostname];
+        saveSettings();
+        renderSavedSites();
+    });
+
+    return row;
+}
+
+// Apply a preset change to any currently active tabs matching this hostname
+function applyPresetToActiveTabs(hostname, settings) {
+    chrome.runtime.sendMessage({ type: "GET_AUDIO_TABS" }, (tabs) => {
+        if (chrome.runtime.lastError || !tabs) return;
+
+        tabs.forEach(tab => {
+            const tabHostname = getHostname(tab.url);
+            if (tabHostname === hostname) {
+                // Update tabVolumes
+                tabVolumes[tab.id] = { volume: settings.volume, muted: settings.muted };
+
+                // Send volume update
+                chrome.runtime.sendMessage({
+                    type: "SET_VOLUME",
+                    tabId: tab.id,
+                    volume: settings.muted ? 0 : settings.volume
+                });
+
+                chrome.runtime.sendMessage({
+                    type: "SET_MUTE",
+                    tabId: tab.id,
+                    muted: settings.muted
+                });
+            }
+        });
+
+        // Re-render active tabs to reflect changes
+        refreshTabs(true);
+    });
+}
+
+// Render the saved sites section
+let lastSavedSitesKey = "";
+
+function renderSavedSites() {
+    const entries = Object.entries(sitePresets);
+
+    // Only show saved sites section if presets are enabled and there are saved sites
+    if (!presetsEnabled || entries.length === 0) {
+        savedSitesSection.classList.add("hidden");
+        lastSavedSitesKey = "";
+        return;
+    }
+
+    // Apply collapsed state
+    if (savedSitesCollapsed) {
+        savedSitesList.classList.add("collapsed");
+        savedSitesArrow.classList.add("collapsed");
+    } else {
+        savedSitesList.classList.remove("collapsed");
+        savedSitesArrow.classList.remove("collapsed");
+    }
+
+    // Get currently active hostnames to filter them out
+    chrome.runtime.sendMessage({ type: "GET_AUDIO_TABS" }, (tabs) => {
+        const activeHostnames = new Set();
+        if (tabs) {
+            tabs.forEach(tab => {
+                const hostname = getHostname(tab.url);
+                if (hostname) activeHostnames.add(hostname);
+            });
+        }
+
+        // Filter to only show sites not currently active
+        const inactiveEntries = entries.filter(([hostname]) => !activeHostnames.has(hostname));
+
+        if (inactiveEntries.length === 0) {
+            savedSitesSection.classList.add("hidden");
+            lastSavedSitesKey = "";
+            return;
+        }
+
+        // Build a key to detect if anything actually changed
+        const newKey = inactiveEntries
+            .map(([h, p]) => `${h}:${p.volume}:${p.muted}`)
+            .sort()
+            .join("|");
+
+        if (newKey === lastSavedSitesKey) {
+            // Nothing changed, just make sure section is visible
+            savedSitesSection.classList.remove("hidden");
+            return;
+        }
+
+        lastSavedSitesKey = newKey;
+        savedSitesSection.classList.remove("hidden");
+        savedSitesList.innerHTML = "";
+
+        // Sort alphabetically
+        inactiveEntries.sort((a, b) => a[0].localeCompare(b[0]));
+
+        inactiveEntries.forEach(([hostname, preset]) => {
+            savedSitesList.appendChild(createSavedSiteRow(hostname, preset));
+        });
+    });
+}
+
 // Render the full tab list
 function renderTabs(tabs) {
     tabList.innerHTML = "";
@@ -228,15 +445,17 @@ function renderTabs(tabs) {
     if (tabs.length === 0) {
         tabList.classList.add("hidden");
         emptyState.classList.remove("hidden");
-        return;
+    } else {
+        tabList.classList.remove("hidden");
+        emptyState.classList.add("hidden");
+
+        tabs.forEach(tab => {
+            tabList.appendChild(createTabRow(tab));
+        });
     }
 
-    tabList.classList.remove("hidden");
-    emptyState.classList.add("hidden");
-
-    tabs.forEach(tab => {
-        tabList.appendChild(createTabRow(tab));
-    });
+    // Always render saved sites after active tabs
+    renderSavedSites();
 }
 
 // Fetch audible tabs and render
@@ -298,7 +517,22 @@ function clampVolumes(maxValue) {
             });
         }
     });
+
+    // Also clamp site presets
+    Object.keys(sitePresets).forEach(hostname => {
+        if (sitePresets[hostname].volume > maxValue) {
+            sitePresets[hostname].volume = maxValue;
+        }
+    });
 }
+
+// Saved sites toggle
+savedSitesToggle.addEventListener("click", () => {
+    savedSitesCollapsed = !savedSitesCollapsed;
+    savedSitesList.classList.toggle("collapsed", savedSitesCollapsed);
+    savedSitesArrow.classList.toggle("collapsed", savedSitesCollapsed);
+    chrome.storage.local.set({ savedSitesCollapsed });
+});
 
 // Settings dropdown toggle
 settingsBtn.addEventListener("click", (e) => {
@@ -347,6 +581,7 @@ document.querySelectorAll(".settings-item").forEach(item => {
 presetsCheckbox.addEventListener("change", (e) => {
     presetsEnabled = e.target.checked;
     saveSettings();
+    renderSavedSites(); // Show/hide saved sites section
 });
 
 // Boost toggle handler
