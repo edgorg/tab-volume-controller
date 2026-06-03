@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "Levels - Tab Volume Mixer",
-    "version": "1.2.0",
-    "description": "Control the volume of individual browser tabs",
+    "name": "Levels - Tab Volume Control & Per-Tab Audio Mixer",
+    "version": "1.3.0",
+    "description": "Control volume for each browser tab independently. Mute, boost, and set per-site volume presets.",
     "permissions": [
         "tabs",
         "storage",
