@@ -1,0 +1,176 @@
+name: Package and Publish Chrome Extension
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'PRIVACY.md'
+      - 'screenshots/**'
+      - 'test/**'
+      - '.vs/**'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read extension version
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' manifest.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extension version: $VERSION"
+
+      - name: Check version against store
+        id: check
+        run: |
+          TOKEN_RESPONSE=$(curl -s "https://oauth2.googleapis.com/token" \
+            -d "client_id=${{ secrets.GOOGLE_CLIENT_ID }}" \
+            -d "client_secret=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            -d "refresh_token=${{ secrets.GOOGLE_REFRESH_TOKEN }}" \
+            -d "grant_type=refresh_token" \
+            -X POST)
+
+          ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "Failed to get access token"
+            echo "$TOKEN_RESPONSE"
+            exit 1
+          fi
+
+          STORE_RESPONSE=$(curl -s \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/${{ secrets.EXTENSION_ID }}?projection=DRAFT")
+
+          STORE_VERSION=$(echo $STORE_RESPONSE | jq -r '.crxVersion // empty')
+          LOCAL_VERSION=${{ steps.version.outputs.version }}
+
+          echo "Store version: $STORE_VERSION"
+          echo "Local version: $LOCAL_VERSION"
+
+          if [ "$STORE_VERSION" = "$LOCAL_VERSION" ]; then
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged, skipping publish"
+          else
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+            echo "New version detected, will publish"
+          fi
+
+      - name: Validate manifest
+        if: steps.check.outputs.should_publish == 'true'
+        run: |
+          jq . manifest.json > /dev/null 2>&1 || { echo "Invalid manifest.json"; exit 1; }
+
+          MANIFEST_VERSION=$(jq -r '.manifest_version' manifest.json)
+          NAME=$(jq -r '.name' manifest.json)
+
+          echo "Name: $NAME"
+          echo "Manifest Version: $MANIFEST_VERSION"
+
+          if [ "$MANIFEST_VERSION" != "3" ]; then
+            echo "::warning::Not using Manifest V3"
+          fi
+
+      - name: Package extension
+        if: steps.check.outputs.should_publish == 'true'
+        run: |
+          zip -r extension.zip \
+            manifest.json \
+            background/ \
+            content/ \
+            icons/ \
+            popup/ \
+            -x "background/.github/*"
+
+          echo "Package size: $(du -h extension.zip | cut -f1)"
+          echo "Contents:"
+          unzip -l extension.zip
+
+      - name: Upload to Chrome Web Store
+        if: steps.check.outputs.should_publish == 'true'
+        run: |
+          TOKEN_RESPONSE=$(curl -s "https://oauth2.googleapis.com/token" \
+            -d "client_id=${{ secrets.GOOGLE_CLIENT_ID }}" \
+            -d "client_secret=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            -d "refresh_token=${{ secrets.GOOGLE_REFRESH_TOKEN }}" \
+            -d "grant_type=refresh_token" \
+            -X POST)
+
+          ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
+
+          UPLOAD_RESPONSE=$(curl -s \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -X PUT \
+            -T extension.zip \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${{ secrets.EXTENSION_ID }}")
+
+          echo "Upload response: $UPLOAD_RESPONSE"
+
+          UPLOAD_STATE=$(echo $UPLOAD_RESPONSE | jq -r '.uploadState')
+
+          if [ "$UPLOAD_STATE" != "SUCCESS" ]; then
+            echo "Upload failed"
+            echo $UPLOAD_RESPONSE | jq '.itemError'
+            exit 1
+          fi
+
+      - name: Publish extension
+        if: steps.check.outputs.should_publish == 'true'
+        run: |
+          TOKEN_RESPONSE=$(curl -s "https://oauth2.googleapis.com/token" \
+            -d "client_id=${{ secrets.GOOGLE_CLIENT_ID }}" \
+            -d "client_secret=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            -d "refresh_token=${{ secrets.GOOGLE_REFRESH_TOKEN }}" \
+            -d "grant_type=refresh_token" \
+            -X POST)
+
+          ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
+
+          PUBLISH_RESPONSE=$(curl -s \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            -X POST \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/${{ secrets.EXTENSION_ID }}/publish")
+
+          echo "Publish response: $PUBLISH_RESPONSE"
+
+          STATUS=$(echo $PUBLISH_RESPONSE | jq -r '.status[0]')
+
+          if [ "$STATUS" = "OK" ] || [ "$STATUS" = "PUBLISHED_WITH_FRICTION_WARNING" ]; then
+            echo "Published successfully"
+          else
+            echo "Publish failed (status: $STATUS)"
+            echo $PUBLISH_RESPONSE | jq '.'
+            exit 1
+          fi
+
+      - name: Create GitHub release
+        if: steps.check.outputs.should_publish == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: extension.zip
+          body: |
+            Automated release of v${{ steps.version.outputs.version }}
+            Published to Chrome Web Store.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.should_publish }}" = "true" ]; then
+            echo "### ✅ v${{ steps.version.outputs.version }} published to Chrome Web Store" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⏭️ Skipped — version unchanged" >> $GITHUB_STEP_SUMMARY
+            echo "Bump version in manifest.json to trigger a publish." >> $GITHUB_STEP_SUMMARY
+          fi
