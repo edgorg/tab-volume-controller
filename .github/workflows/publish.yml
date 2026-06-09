@@ -81,13 +81,19 @@ jobs:
       - name: Package extension
         if: steps.check.outputs.should_publish == 'true'
         run: |
-          zip -r extension.zip \
-            manifest.json \
-            background/ \
-            content/ \
-            icons/ \
-            popup/ \
-            -x "background/.github/*"
+          if [ ! -f ".extensioninclude" ]; then
+            echo "Error: .extensioninclude file not found"
+            exit 1
+          fi
+
+          INCLUDE_PATHS=""
+          while IFS= read -r line || [ -n "$line" ]; do
+            [[ "$line" =~ ^#.*$ ]] && continue
+            [[ -z "$line" ]] && continue
+            INCLUDE_PATHS="$INCLUDE_PATHS $line"
+          done < .extensioninclude
+
+          zip -r extension.zip $INCLUDE_PATHS
 
           echo "Package size: $(du -h extension.zip | cut -f1)"
           echo "Contents:"
@@ -95,6 +101,7 @@ jobs:
 
       - name: Upload to Chrome Web Store
         if: steps.check.outputs.should_publish == 'true'
+        id: upload
         run: |
           TOKEN_RESPONSE=$(curl -s "https://oauth2.googleapis.com/token" \
             -d "client_id=${{ secrets.GOOGLE_CLIENT_ID }}" \
@@ -104,6 +111,11 @@ jobs:
             -X POST)
 
           ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "Failed to get access token"
+            exit 1
+          fi
 
           UPLOAD_RESPONSE=$(curl -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -115,15 +127,21 @@ jobs:
           echo "Upload response: $UPLOAD_RESPONSE"
 
           UPLOAD_STATE=$(echo $UPLOAD_RESPONSE | jq -r '.uploadState')
+          ERROR_CODE=$(echo $UPLOAD_RESPONSE | jq -r '.itemError[0].error_code // empty')
 
-          if [ "$UPLOAD_STATE" != "SUCCESS" ]; then
+          if [ "$UPLOAD_STATE" = "SUCCESS" ]; then
+            echo "upload_success=true" >> $GITHUB_OUTPUT
+          elif [ "$ERROR_CODE" = "ITEM_NOT_UPDATABLE" ]; then
+            echo "::warning::Extension is currently in review — cannot update"
+            echo "upload_success=false" >> $GITHUB_OUTPUT
+          else
             echo "Upload failed"
             echo $UPLOAD_RESPONSE | jq '.itemError'
             exit 1
           fi
 
       - name: Publish extension
-        if: steps.check.outputs.should_publish == 'true'
+        if: steps.check.outputs.should_publish == 'true' && steps.upload.outputs.upload_success == 'true'
         run: |
           TOKEN_RESPONSE=$(curl -s "https://oauth2.googleapis.com/token" \
             -d "client_id=${{ secrets.GOOGLE_CLIENT_ID }}" \
@@ -154,7 +172,7 @@ jobs:
           fi
 
       - name: Create GitHub release
-        if: steps.check.outputs.should_publish == 'true'
+        if: steps.check.outputs.should_publish == 'true' && steps.upload.outputs.upload_success == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.version.outputs.version }}
@@ -168,9 +186,12 @@ jobs:
 
       - name: Summary
         run: |
-          if [ "${{ steps.check.outputs.should_publish }}" = "true" ]; then
-            echo "### ✅ v${{ steps.version.outputs.version }} published to Chrome Web Store" >> $GITHUB_STEP_SUMMARY
-          else
+          if [ "${{ steps.check.outputs.should_publish }}" != "true" ]; then
             echo "### ⏭️ Skipped — version unchanged" >> $GITHUB_STEP_SUMMARY
             echo "Bump version in manifest.json to trigger a publish." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.upload.outputs.upload_success }}" != "true" ]; then
+            echo "### ⚠️ Extension is currently in review" >> $GITHUB_STEP_SUMMARY
+            echo "The store wouldn't accept an update right now. Try again after review completes." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ v${{ steps.version.outputs.version }} published to Chrome Web Store" >> $GITHUB_STEP_SUMMARY
           fi

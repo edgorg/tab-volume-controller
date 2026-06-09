@@ -1,0 +1,6 @@
+# Files and folders to include in the extension package
+manifest.json
+background/
+content/
+icons/
+popup/
