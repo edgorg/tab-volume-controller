@@ -173,7 +173,7 @@ jobs:
 
       - name: Create GitHub release
         if: steps.check.outputs.should_publish == 'true' && steps.upload.outputs.upload_success == 'true'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
