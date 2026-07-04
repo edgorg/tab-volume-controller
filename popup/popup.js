@@ -19,6 +19,25 @@ let sitePresets = {};
 let isInteracting = false;
 let currentTabIds = [];
 let savedSitesCollapsed = true;
+let lastAudioTabs = []; // Cache to pass to renderSavedSites without re-fetching
+
+// --- Utility: HTML escaping to prevent XSS ---
+function escapeHtml(str) {
+    if (!str) return "";
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// --- Debounced save to avoid write pressure during slider drag ---
+let saveTimeout = null;
+function debouncedSaveSettings() {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+        saveSettings();
+        saveTimeout = null;
+    }, 300);
+}
 
 // Get current max volume multiplier
 function getMaxValue() {
@@ -136,16 +155,18 @@ function createTabRow(tab) {
     row.className = "tab-row";
 
     const percentDisplay = Math.round(settings.volume * 100);
+    const safeTitle = escapeHtml(tab.title);
+    const fallbackIcon = chrome.runtime.getURL("icons/icon16-light.png");
 
     row.innerHTML = `
     <img 
       class="tab-favicon" 
-      src="${tab.favIconUrl || chrome.runtime.getURL("icons/icon16-light.png")}" 
+      src="${tab.favIconUrl || fallbackIcon}" 
       alt=""
-      onerror="this.src='${chrome.runtime.getURL("icons/icon16-light.png")}'"
+      onerror="this.src='${fallbackIcon}'"
     >
     <div class="tab-info">
-      <div class="tab-title" title="${tab.title}">${tab.title}</div>
+      <div class="tab-title" title="${safeTitle}">${safeTitle}</div>
       <div class="slider-row">
         <input
          type="range"
@@ -153,12 +174,12 @@ function createTabRow(tab) {
          min="0"
          max="${maxValue * 100}" 
          value="${settings.volume * 100}"
-         aria-label="Volume for ${tab.title}"
+         aria-label="Volume for ${safeTitle}"
         >
         <span class="volume-label">${percentDisplay}%</span>
       </div>
     </div>
-    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}" aria-label="${settings.muted ? "Unmute" : "Mute"} ${tab.title}">
+    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}" aria-label="${settings.muted ? "Unmute" : "Mute"} ${safeTitle}">
     </button>
   `;
 
@@ -177,10 +198,13 @@ function createTabRow(tab) {
     // Set initial icon
     muteBtn.appendChild(getVolumeIcon(settings.volume, settings.muted));
 
-    // Track when user is interacting with slider
+    // Track when user is interacting with slider (mouse + touch + keyboard)
     slider.addEventListener("mousedown", () => { isInteracting = true; });
     slider.addEventListener("mouseup", () => { isInteracting = false; });
-    slider.addEventListener("mouseleave", () => { isInteracting = false; });
+    slider.addEventListener("touchstart", () => { isInteracting = true; });
+    slider.addEventListener("touchend", () => { isInteracting = false; });
+    slider.addEventListener("focus", () => { isInteracting = true; });
+    slider.addEventListener("blur", () => { isInteracting = false; });
 
     // Slider input handler
     slider.addEventListener("input", (e) => {
@@ -202,7 +226,7 @@ function createTabRow(tab) {
             volume: settings.muted ? 0 : volume
         });
 
-        saveSettings();
+        debouncedSaveSettings();
     });
 
     // Mute button handler
@@ -211,7 +235,7 @@ function createTabRow(tab) {
         tabVolumes[tab.id] = settings;
         muteBtn.replaceChildren(getVolumeIcon(settings.volume, settings.muted));
         muteBtn.title = settings.muted ? "Unmute" : "Mute";
-        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${tab.title}`);
+        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${safeTitle}`);
 
         // Save as site preset
         if (hostname && presetsEnabled) {
@@ -254,17 +278,19 @@ function createSavedSiteRow(hostname, preset) {
     row.className = "saved-site-row";
 
     const percentDisplay = Math.round(settings.volume * 100);
-    const faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=32`;
+    const safeHostname = escapeHtml(hostname);
+    const fallbackIcon = chrome.runtime.getURL("icons/icon16-light.png");
 
     row.innerHTML = `
     <img 
       class="saved-site-favicon" 
       src="${faviconUrl}" 
       alt=""
-      onerror="this.src='${chrome.runtime.getURL("icons/icon16-light.png")}'"
+      onerror="this.src='${fallbackIcon}'"
     >
     <div class="saved-site-info">
-      <div class="saved-site-hostname" title="${hostname}">${hostname}</div>
+      <div class="saved-site-hostname" title="${safeHostname}">${safeHostname}</div>
       <div class="slider-row">
         <input
          type="range"
@@ -272,14 +298,14 @@ function createSavedSiteRow(hostname, preset) {
          min="0"
          max="${maxValue * 100}" 
          value="${settings.volume * 100}"
-         aria-label="Volume for ${hostname}"
+         aria-label="Volume for ${safeHostname}"
         >
         <span class="volume-label">${percentDisplay}%</span>
       </div>
     </div>
-    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}" aria-label="${settings.muted ? "Unmute" : "Mute"} ${hostname}">
+    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}" aria-label="${settings.muted ? "Unmute" : "Mute"} ${safeHostname}">
     </button>
-    <button class="delete-preset-btn" title="Remove saved preset" aria-label="Remove preset for ${hostname}">
+    <button class="delete-preset-btn" title="Remove saved preset" aria-label="Remove preset for ${safeHostname}">
     </button>
   `;
 
@@ -299,10 +325,13 @@ function createSavedSiteRow(hostname, preset) {
     muteBtn.appendChild(getVolumeIcon(settings.volume, settings.muted));
     deleteBtn.appendChild(getDeleteIcon());
 
-    // Track interaction
+    // Track interaction (mouse + touch + keyboard)
     slider.addEventListener("mousedown", () => { isInteracting = true; });
     slider.addEventListener("mouseup", () => { isInteracting = false; });
-    slider.addEventListener("mouseleave", () => { isInteracting = false; });
+    slider.addEventListener("touchstart", () => { isInteracting = true; });
+    slider.addEventListener("touchend", () => { isInteracting = false; });
+    slider.addEventListener("focus", () => { isInteracting = true; });
+    slider.addEventListener("blur", () => { isInteracting = false; });
 
     // Slider input handler
     slider.addEventListener("input", (e) => {
@@ -315,7 +344,7 @@ function createSavedSiteRow(hostname, preset) {
 
         // Also update any active tabs with this hostname
         applyPresetToActiveTabs(hostname, settings);
-        saveSettings();
+        debouncedSaveSettings();
     });
 
     // Mute button handler
@@ -324,7 +353,7 @@ function createSavedSiteRow(hostname, preset) {
         sitePresets[hostname] = { volume: settings.volume, muted: settings.muted };
         muteBtn.replaceChildren(getVolumeIcon(settings.volume, settings.muted));
         muteBtn.title = settings.muted ? "Unmute" : "Mute";
-        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${hostname}`);
+        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${safeHostname}`);
 
         // Also update any active tabs with this hostname
         applyPresetToActiveTabs(hostname, settings);
@@ -343,33 +372,28 @@ function createSavedSiteRow(hostname, preset) {
 
 // Apply a preset change to any currently active tabs matching this hostname
 function applyPresetToActiveTabs(hostname, settings) {
-    chrome.runtime.sendMessage({ type: "GET_AUDIO_TABS" }, (tabs) => {
-        if (chrome.runtime.lastError || !tabs) return;
+    // Use cached lastAudioTabs instead of re-fetching
+    lastAudioTabs.forEach(tab => {
+        const tabHostname = getHostname(tab.url);
+        if (tabHostname === hostname) {
+            tabVolumes[tab.id] = { volume: settings.volume, muted: settings.muted };
 
-        tabs.forEach(tab => {
-            const tabHostname = getHostname(tab.url);
-            if (tabHostname === hostname) {
-                // Update tabVolumes
-                tabVolumes[tab.id] = { volume: settings.volume, muted: settings.muted };
+            chrome.runtime.sendMessage({
+                type: "SET_VOLUME",
+                tabId: tab.id,
+                volume: settings.muted ? 0 : settings.volume
+            });
 
-                // Send volume update
-                chrome.runtime.sendMessage({
-                    type: "SET_VOLUME",
-                    tabId: tab.id,
-                    volume: settings.muted ? 0 : settings.volume
-                });
-
-                chrome.runtime.sendMessage({
-                    type: "SET_MUTE",
-                    tabId: tab.id,
-                    muted: settings.muted
-                });
-            }
-        });
-
-        // Re-render active tabs to reflect changes
-        refreshTabs(true);
+            chrome.runtime.sendMessage({
+                type: "SET_MUTE",
+                tabId: tab.id,
+                muted: settings.muted
+            });
+        }
     });
+
+    // Re-render active tabs to reflect changes
+    refreshTabs(true);
 }
 
 // Render the saved sites section
@@ -394,47 +418,43 @@ function renderSavedSites() {
         savedSitesArrow.classList.remove("collapsed");
     }
 
-    // Get currently active hostnames to filter them out
-    chrome.runtime.sendMessage({ type: "GET_AUDIO_TABS" }, (tabs) => {
-        const activeHostnames = new Set();
-        if (tabs) {
-            tabs.forEach(tab => {
-                const hostname = getHostname(tab.url);
-                if (hostname) activeHostnames.add(hostname);
-            });
-        }
+    // Use cached active tabs instead of re-fetching from service worker
+    const activeHostnames = new Set();
+    lastAudioTabs.forEach(tab => {
+        const hostname = getHostname(tab.url);
+        if (hostname) activeHostnames.add(hostname);
+    });
 
-        // Filter to only show sites not currently active
-        const inactiveEntries = entries.filter(([hostname]) => !activeHostnames.has(hostname));
+    // Filter to only show sites not currently active
+    const inactiveEntries = entries.filter(([hostname]) => !activeHostnames.has(hostname));
 
-        if (inactiveEntries.length === 0) {
-            savedSitesSection.classList.add("hidden");
-            lastSavedSitesKey = "";
-            return;
-        }
+    if (inactiveEntries.length === 0) {
+        savedSitesSection.classList.add("hidden");
+        lastSavedSitesKey = "";
+        return;
+    }
 
-        // Build a key to detect if anything actually changed
-        const newKey = inactiveEntries
-            .map(([h, p]) => `${h}:${p.volume}:${p.muted}`)
-            .sort()
-            .join("|");
+    // Build a key to detect if anything actually changed
+    const newKey = inactiveEntries
+        .map(([h, p]) => `${h}:${p.volume}:${p.muted}`)
+        .sort()
+        .join("|");
 
-        if (newKey === lastSavedSitesKey) {
-            // Nothing changed, just make sure section is visible
-            savedSitesSection.classList.remove("hidden");
-            return;
-        }
-
-        lastSavedSitesKey = newKey;
+    if (newKey === lastSavedSitesKey) {
+        // Nothing changed, just make sure section is visible
         savedSitesSection.classList.remove("hidden");
-        savedSitesList.innerHTML = "";
+        return;
+    }
 
-        // Sort alphabetically
-        inactiveEntries.sort((a, b) => a[0].localeCompare(b[0]));
+    lastSavedSitesKey = newKey;
+    savedSitesSection.classList.remove("hidden");
+    savedSitesList.innerHTML = "";
 
-        inactiveEntries.forEach(([hostname, preset]) => {
-            savedSitesList.appendChild(createSavedSiteRow(hostname, preset));
-        });
+    // Sort alphabetically
+    inactiveEntries.sort((a, b) => a[0].localeCompare(b[0]));
+
+    inactiveEntries.forEach(([hostname, preset]) => {
+        savedSitesList.appendChild(createSavedSiteRow(hostname, preset));
     });
 }
 
@@ -469,6 +489,8 @@ async function refreshTabs(force = false) {
         }
 
         const newTabs = tabs || [];
+        lastAudioTabs = newTabs; // Cache for renderSavedSites and applyPresetToActiveTabs
+
         const newTabIds = newTabs.map(t => t.id).sort();
 
         if (force || JSON.stringify(newTabIds) !== JSON.stringify(currentTabIds)) {
@@ -523,6 +545,25 @@ function clampVolumes(maxValue) {
         if (sitePresets[hostname].volume > maxValue) {
             sitePresets[hostname].volume = maxValue;
         }
+    });
+}
+
+// Clean up stale tabVolumes entries (tab IDs from previous sessions)
+function cleanupStaleTabVolumes() {
+    chrome.tabs.query({}, (allTabs) => {
+        const validTabIds = allTabs.map(t => t.id);
+        chrome.runtime.sendMessage({
+            type: "CLEANUP_TAB_VOLUMES",
+            validTabIds
+        });
+
+        // Also clean local copy
+        const validSet = new Set(validTabIds.map(id => String(id)));
+        Object.keys(tabVolumes).forEach(key => {
+            if (!validSet.has(key)) {
+                delete tabVolumes[key];
+            }
+        });
     });
 }
 
@@ -636,7 +677,8 @@ function updateExtensionIcon() {
 loadSettings().then(() => {
     refreshTabs(true);
     updateExtensionIcon();
+    cleanupStaleTabVolumes();
 });
 
-// Poll for changes every second while popup is open
-setInterval(refreshTabs, 1000);
+// Poll for changes every 2 seconds while popup is open (reduced from 1s)
+setInterval(refreshTabs, 2000);

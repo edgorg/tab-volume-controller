@@ -35,10 +35,6 @@
         HTMLMediaElement.prototype, 'volume'
     );
 
-    const originalMutedDescriptor = Object.getOwnPropertyDescriptor(
-        HTMLMediaElement.prototype, 'muted'
-    );
-
     const elementIntendedVolumes = new WeakMap();
 
     Object.defineProperty(HTMLMediaElement.prototype, 'volume', {
@@ -66,10 +62,15 @@
             const adjusted = masterMuted ? 0 : intended * masterVolume;
             originalVolumeDescriptor.set.call(el, Math.max(0, Math.min(1, adjusted)));
         });
-        applyToShadowRoots(document);
+        applyToShadowRoots(document, 0);
     }
 
-    function applyToShadowRoots(root) {
+    // Traverse shadow roots with depth limit to avoid excessive DOM traversal
+    const MAX_SHADOW_DEPTH = 3;
+
+    function applyToShadowRoots(root, depth) {
+        if (depth >= MAX_SHADOW_DEPTH) return;
+
         root.querySelectorAll('*').forEach(el => {
             if (el.shadowRoot) {
                 const shadowMedia = el.shadowRoot.querySelectorAll('video, audio');
@@ -80,7 +81,7 @@
                     const adjusted = masterMuted ? 0 : intended * masterVolume;
                     originalVolumeDescriptor.set.call(media, Math.max(0, Math.min(1, adjusted)));
                 });
-                applyToShadowRoots(el.shadowRoot);
+                applyToShadowRoots(el.shadowRoot, depth + 1);
             }
         });
     }

@@ -1,6 +1,5 @@
 const injectedTabs = new Set();
 const managedTabs = new Set();
-const presetAppliedTabs = new Set();
 
 // --- Icon Theming ---
 
@@ -80,11 +79,11 @@ async function ensureContentScript(tabId) {
 
         injectedTabs.add(tabId);
     } catch (e) {
-        console.warn(`Could not inject into tab ${tabId}:`, e.message);
+        console.warn(`[Levels] Could not inject into tab ${tabId}:`, e.message);
     }
 }
 
-// --- Volume Application ---
+// --- Volume Application (waits for content script ready) ---
 
 async function applyVolumeToTab(tab) {
     const settings = await getSettingsForTab(tab);
@@ -92,17 +91,28 @@ async function applyVolumeToTab(tab) {
 
     await ensureContentScript(tab.id);
 
-    setTimeout(() => {
-        chrome.tabs.sendMessage(tab.id, {
-            type: "SET_MUTE",
-            muted: settings.muted
-        }).catch(() => {});
+    // Wait for content script to acknowledge readiness
+    try {
+        await chrome.tabs.sendMessage(tab.id, { type: "PING" });
+    } catch {
+        // Content script not ready — retry once after brief delay
+        await new Promise(r => setTimeout(r, 150));
+        try {
+            await chrome.tabs.sendMessage(tab.id, { type: "PING" });
+        } catch {
+            return; // Give up — content script not responding
+        }
+    }
 
-        chrome.tabs.sendMessage(tab.id, {
-            type: "SET_VOLUME",
-            volume: settings.volume
-        }).catch(() => {});
-    }, 100);
+    chrome.tabs.sendMessage(tab.id, {
+        type: "SET_MUTE",
+        muted: settings.muted
+    }).catch(() => {});
+
+    chrome.tabs.sendMessage(tab.id, {
+        type: "SET_VOLUME",
+        volume: settings.volume
+    }).catch(() => {});
 }
 
 // --- Tab Tracking ---
@@ -130,7 +140,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
     injectedTabs.delete(tabId);
     managedTabs.delete(tabId);
-    presetAppliedTabs.delete(tabId);
 });
 
 // --- Message Handling ---
@@ -199,6 +208,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }).catch(() => {});
         });
         sendResponse({ success: true });
+        return true;
+    }
+
+    if (message.type === "CLEANUP_TAB_VOLUMES") {
+        // Remove stale tabVolumes entries for tabs that no longer exist
+        const validTabIds = message.validTabIds || [];
+        chrome.storage.local.get(["tabVolumes"], (data) => {
+            const tabVolumes = data.tabVolumes || {};
+            const validSet = new Set(validTabIds.map(id => String(id)));
+            let changed = false;
+
+            Object.keys(tabVolumes).forEach(key => {
+                if (!validSet.has(key)) {
+                    delete tabVolumes[key];
+                    changed = true;
+                }
+            });
+
+            if (changed) {
+                chrome.storage.local.set({ tabVolumes });
+            }
+            sendResponse({ success: true, cleaned: changed });
+        });
         return true;
     }
 });
