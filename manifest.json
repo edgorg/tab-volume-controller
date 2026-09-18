@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Levels - Tab Volume Control & Per-Tab Audio Mixer",
-    "version": "1.3.1",
+    "version": "2.1.0",
     "description": "Control volume for each browser tab independently. Mute, boost, and set per-site volume presets.",
     "permissions": [
         "tabs",
@@ -38,6 +38,26 @@
             "all_frames": true
         }
     ],
+    "commands": {
+        "volume-up": {
+            "suggested_key": {
+                "default": "Alt+Shift+Up"
+            },
+            "description": "Volume up (active tab)"
+        },
+        "volume-down": {
+            "suggested_key": {
+                "default": "Alt+Shift+Down"
+            },
+            "description": "Volume down (active tab)"
+        },
+        "toggle-mute": {
+            "suggested_key": {
+                "default": "Alt+Shift+M"
+            },
+            "description": "Mute/unmute (active tab)"
+        }
+    },
     "icons": {
         "16": "icons/icon16-dark.png",
         "48": "icons/icon48-dark.png",

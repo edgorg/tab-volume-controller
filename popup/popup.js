@@ -10,6 +10,9 @@ const savedSitesSection = document.getElementById("saved-sites-section");
 const savedSitesToggle = document.getElementById("saved-sites-toggle");
 const savedSitesArrow = document.getElementById("saved-sites-arrow");
 const savedSitesList = document.getElementById("saved-sites-list");
+const shortcutsToggle = document.getElementById("shortcuts-toggle");
+const shortcutsArrow = document.getElementById("shortcuts-arrow");
+const shortcutsBody = document.getElementById("shortcuts-body");
 
 let boostEnabled = false;
 let superBoostEnabled = false;
@@ -17,8 +20,10 @@ let presetsEnabled = true;
 let tabVolumes = {};
 let sitePresets = {};
 let isInteracting = false;
+let isSelfUpdating = false; // Guard against storage.onChanged re-render loops
 let currentTabIds = [];
 let savedSitesCollapsed = true;
+let shortcutsCollapsed = true;
 let lastAudioTabs = []; // Cache to pass to renderSavedSites without re-fetching
 
 // --- Debounced save to avoid write pressure during slider drag ---
@@ -40,21 +45,27 @@ function getMaxValue() {
 
 // Load saved settings from storage
 async function loadSettings() {
-    const data = await chrome.storage.local.get(["boostEnabled", "superBoostEnabled", "presetsEnabled", "tabVolumes", "sitePresets", "savedSitesCollapsed"]);
+    const data = await chrome.storage.local.get(["boostEnabled", "superBoostEnabled", "presetsEnabled", "tabVolumes", "sitePresets", "savedSitesCollapsed", "shortcutsCollapsed"]);
     boostEnabled = data.boostEnabled || false;
     superBoostEnabled = data.superBoostEnabled || false;
     presetsEnabled = data.presetsEnabled !== false;
     tabVolumes = data.tabVolumes || {};
     sitePresets = data.sitePresets || {};
     savedSitesCollapsed = data.savedSitesCollapsed === true;
+    shortcutsCollapsed = data.shortcutsCollapsed !== false; // Default to collapsed
     boostCheckbox.checked = boostEnabled;
     superBoostCheckbox.checked = superBoostEnabled;
     presetsCheckbox.checked = presetsEnabled;
+    shortcutsBody.classList.toggle("collapsed", shortcutsCollapsed);
+    shortcutsArrow.classList.toggle("collapsed", shortcutsCollapsed);
 }
 
 // Save settings to storage
 async function saveSettings() {
+    isSelfUpdating = true;
     await chrome.storage.local.set({ boostEnabled, superBoostEnabled, presetsEnabled, tabVolumes, sitePresets });
+    // Small delay before clearing the guard to ensure the onChanged event fires first
+    setTimeout(() => { isSelfUpdating = false; }, 100);
 }
 
 // Extract hostname from URL
@@ -602,6 +613,14 @@ savedSitesToggle.addEventListener("click", () => {
     chrome.storage.local.set({ savedSitesCollapsed });
 });
 
+// Shortcuts toggle
+shortcutsToggle.addEventListener("click", () => {
+    shortcutsCollapsed = !shortcutsCollapsed;
+    shortcutsBody.classList.toggle("collapsed", shortcutsCollapsed);
+    shortcutsArrow.classList.toggle("collapsed", shortcutsCollapsed);
+    chrome.storage.local.set({ shortcutsCollapsed });
+});
+
 // Settings dropdown toggle
 settingsBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -686,6 +705,20 @@ superBoostCheckbox.addEventListener("change", (e) => {
 
 // Reset all button handler
 resetAllBtn.addEventListener("click", resetAll);
+
+// Open Chrome's shortcut customization page
+document.getElementById("customize-shortcuts").addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
+});
+
+// React to storage changes from keyboard shortcuts (or other sources)
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || isSelfUpdating) return;
+    if (changes.tabVolumes || changes.sitePresets) {
+        loadSettings().then(() => refreshTabs(true));
+    }
+});
 
 // Update extension icon based on current theme
 function updateExtensionIcon() {

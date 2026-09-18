@@ -288,6 +288,95 @@ body {
         }
 }
 
+/* Keyboard shortcut hints in settings dropdown */
+.shortcuts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+
+    .shortcuts-header:hover {
+        background: var(--hover-bg);
+    }
+
+    .shortcuts-header:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+    }
+
+    .shortcuts-header .settings-section-title {
+        padding: 0;
+    }
+
+.shortcuts-arrow {
+    fill: var(--text-secondary);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.shortcuts-arrow.collapsed {
+    transform: rotate(-90deg);
+}
+
+.shortcuts-body {
+    max-height: 150px;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+}
+
+.shortcuts-body.collapsed {
+    max-height: 0;
+}
+
+.shortcut-list {
+    padding: 4px 16px 0;
+}
+
+.shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+}
+
+.shortcut-action {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.shortcut-key {
+    font-family: "Segoe UI", Roboto, monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    white-space: nowrap;
+}
+
+.shortcuts-link {
+    display: block;
+    font-size: 11px;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 8px 16px;
+    transition: background 0.15s ease;
+}
+
+    .shortcuts-link:hover {
+        background: var(--hover-bg);
+    }
+
+    .shortcuts-link:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+    }
+
 /* Tab list */
 .tab-list {
     display: flex;
@@ -537,10 +626,14 @@ body {
     flex-direction: column;
     gap: 2px;
     margin-top: 4px;
+    max-height: 500px;
+    overflow: hidden;
+    transition: max-height 0.2s ease, margin-top 0.2s ease;
 }
 
 .saved-sites-list.collapsed {
-    display: none;
+    max-height: 0;
+    margin-top: 0;
 }
 
 /* Saved site row - reuses .tab-row styles but with slight distinction */

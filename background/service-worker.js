@@ -160,6 +160,65 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     }
 });
 
+// --- Keyboard Shortcuts ---
+
+const VOLUME_STEP = 0.1; // 10% per key press
+
+async function getMaxValue() {
+    const data = await chrome.storage.local.get(["boostEnabled", "superBoostEnabled"]);
+    if (data.superBoostEnabled) return 10.0;
+    if (data.boostEnabled) return 2.0;
+    return 1.0;
+}
+
+chrome.commands.onCommand.addListener(async (command) => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return;
+
+    const data = await chrome.storage.local.get(["tabVolumes", "sitePresets", "presetsEnabled"]);
+    const tabVolumes = data.tabVolumes || {};
+    const sitePresets = data.sitePresets || {};
+    const presetsEnabled = data.presetsEnabled !== false;
+
+    let hostname = null;
+    try { hostname = new URL(tab.url).hostname; } catch { /* ignore */ }
+
+    const sitePreset = (hostname && presetsEnabled) ? sitePresets[hostname] : null;
+    const current = { ...(tabVolumes[tab.id] || sitePreset || { volume: 1.0, muted: false }) };
+
+    if (command === "toggle-mute") {
+        current.muted = !current.muted;
+    } else if (command === "volume-up") {
+        const maxValue = await getMaxValue();
+        current.volume = Math.min(maxValue, Math.round((current.volume + VOLUME_STEP) * 100) / 100);
+    } else if (command === "volume-down") {
+        current.volume = Math.max(0, Math.round((current.volume - VOLUME_STEP) * 100) / 100);
+    } else {
+        return;
+    }
+
+    // Persist to tab volumes and site presets
+    tabVolumes[tab.id] = current;
+    if (hostname && presetsEnabled) {
+        sitePresets[hostname] = { volume: current.volume, muted: current.muted };
+    }
+    await chrome.storage.local.set({ tabVolumes, sitePresets });
+
+    // Apply to the tab
+    managedTabs.add(tab.id);
+    await ensureContentScript(tab.id);
+
+    chrome.tabs.sendMessage(tab.id, {
+        type: "SET_VOLUME",
+        volume: current.volume
+    }).catch(() => {});
+
+    chrome.tabs.sendMessage(tab.id, {
+        type: "SET_MUTE",
+        muted: current.muted
+    }).catch(() => {});
+});
+
 // --- Message Handling ---
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
