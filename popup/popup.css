@@ -234,7 +234,11 @@ body {
 }
 
     .toggle-switch-small input {
-        display: none;
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
     }
 
 .toggle-slider-small {
@@ -299,7 +303,6 @@ body {
     padding: 10px;
     border-radius: 8px;
     transition: background 0.15s ease;
-    cursor: pointer;
 }
 
     .tab-row:hover {

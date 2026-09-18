@@ -37,6 +37,84 @@
 
     const elementIntendedVolumes = new WeakMap();
 
+    // --- Web Audio API boost ---
+    // Native HTMLMediaElement.volume is clamped to [0, 1] by the browser,
+    // so we use a GainNode to amplify beyond 100%.
+
+    const audioContexts = new WeakMap(); // element → { context, gainNode, source }
+
+    function getOrCreateGainNode(el) {
+        if (audioContexts.has(el)) {
+            return audioContexts.get(el);
+        }
+
+        try {
+            const context = new AudioContext();
+            const source = context.createMediaElementSource(el);
+            const gainNode = context.createGain();
+
+            // Add a compressor to tame harsh clipping at high gain levels
+            const compressor = context.createDynamicsCompressor();
+            compressor.threshold.setValueAtTime(-6, context.currentTime);
+            compressor.knee.setValueAtTime(12, context.currentTime);
+            compressor.ratio.setValueAtTime(8, context.currentTime);
+            compressor.attack.setValueAtTime(0.003, context.currentTime);
+            compressor.release.setValueAtTime(0.15, context.currentTime);
+
+            source.connect(gainNode);
+            gainNode.connect(compressor);
+            compressor.connect(context.destination);
+
+            const entry = { context, gainNode, source, compressor };
+            audioContexts.set(el, entry);
+            return entry;
+        } catch (e) {
+            // createMediaElementSource can fail for cross-origin media
+            // or elements that already have a source node
+            return null;
+        }
+    }
+
+    function applyVolume(el) {
+        const intended = elementIntendedVolumes.get(el) ??
+            originalVolumeDescriptor.get.call(el);
+        elementIntendedVolumes.set(el, intended);
+
+        if (masterMuted) {
+            originalVolumeDescriptor.set.call(el, 0);
+            return;
+        }
+
+        const effective = intended * masterVolume;
+
+        if (effective <= 1.0) {
+            // Normal range — use native volume directly
+            originalVolumeDescriptor.set.call(el, Math.max(0, effective));
+
+            // If a GainNode was previously created, reset it to unity
+            const existing = audioContexts.get(el);
+            if (existing) {
+                existing.gainNode.gain.value = 1.0;
+            }
+        } else {
+            // Boost range — set native volume to max, apply excess via GainNode
+            originalVolumeDescriptor.set.call(el, Math.max(0, Math.min(1, intended)));
+
+            const audio = getOrCreateGainNode(el);
+            if (audio) {
+                audio.gainNode.gain.value = masterVolume;
+
+                // Resume context if it was suspended (autoplay policy)
+                if (audio.context.state === 'suspended') {
+                    audio.context.resume().catch(() => {});
+                }
+            } else {
+                // Fallback: can't create audio context, clamp to max native
+                originalVolumeDescriptor.set.call(el, 1.0);
+            }
+        }
+    }
+
     Object.defineProperty(HTMLMediaElement.prototype, 'volume', {
         get() {
             if (elementIntendedVolumes.has(this)) {
@@ -46,8 +124,7 @@
         },
         set(value) {
             elementIntendedVolumes.set(this, value);
-            const adjusted = masterMuted ? 0 : value * masterVolume;
-            originalVolumeDescriptor.set.call(this, Math.max(0, Math.min(1, adjusted)));
+            applyVolume(this);
         },
         configurable: true,
         enumerable: true
@@ -55,13 +132,7 @@
 
     function applyToAll() {
         const allMedia = document.querySelectorAll('video, audio');
-        allMedia.forEach(el => {
-            const intended = elementIntendedVolumes.get(el) ??
-                originalVolumeDescriptor.get.call(el);
-            elementIntendedVolumes.set(el, intended);
-            const adjusted = masterMuted ? 0 : intended * masterVolume;
-            originalVolumeDescriptor.set.call(el, Math.max(0, Math.min(1, adjusted)));
-        });
+        allMedia.forEach(el => applyVolume(el));
         applyToShadowRoots(document, 0);
     }
 
@@ -74,13 +145,7 @@
         root.querySelectorAll('*').forEach(el => {
             if (el.shadowRoot) {
                 const shadowMedia = el.shadowRoot.querySelectorAll('video, audio');
-                shadowMedia.forEach(media => {
-                    const intended = elementIntendedVolumes.get(media) ??
-                        originalVolumeDescriptor.get.call(media);
-                    elementIntendedVolumes.set(media, intended);
-                    const adjusted = masterMuted ? 0 : intended * masterVolume;
-                    originalVolumeDescriptor.set.call(media, Math.max(0, Math.min(1, adjusted)));
-                });
+                shadowMedia.forEach(media => applyVolume(media));
                 applyToShadowRoots(el.shadowRoot, depth + 1);
             }
         });
@@ -123,13 +188,7 @@
                     mediaElements.push(...node.querySelectorAll('video, audio'));
                 }
 
-                mediaElements.forEach(el => {
-                    const intended = elementIntendedVolumes.get(el) ??
-                        originalVolumeDescriptor.get.call(el);
-                    elementIntendedVolumes.set(el, intended);
-                    const adjusted = masterMuted ? 0 : intended * masterVolume;
-                    originalVolumeDescriptor.set.call(el, Math.max(0, Math.min(1, adjusted)));
-                });
+                mediaElements.forEach(el => applyVolume(el));
             }
         }
     });

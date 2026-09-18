@@ -117,6 +117,20 @@ async function applyVolumeToTab(tab) {
 
 // --- Tab Tracking ---
 
+const applyTimers = new Map(); // tabId → timeout handle
+
+// Debounce volume application per tab to avoid double-calls
+// when audible + complete fire in quick succession
+function debouncedApplyVolume(tab) {
+    if (applyTimers.has(tab.id)) {
+        clearTimeout(applyTimers.get(tab.id));
+    }
+    applyTimers.set(tab.id, setTimeout(() => {
+        applyTimers.delete(tab.id);
+        applyVolumeToTab(tab);
+    }, 100));
+}
+
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     // When navigation starts, preload the volume before anything else runs
     if (changeInfo.status === "loading" && tab.url) {
@@ -128,18 +142,22 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
     if (changeInfo.audible === true) {
         managedTabs.add(tabId);
-        applyVolumeToTab(tab);
+        debouncedApplyVolume(tab);
     }
 
     if (changeInfo.status === "complete" && managedTabs.has(tabId)) {
         injectedTabs.delete(tabId);
-        applyVolumeToTab(tab);
+        debouncedApplyVolume(tab);
     }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
     injectedTabs.delete(tabId);
     managedTabs.delete(tabId);
+    if (applyTimers.has(tabId)) {
+        clearTimeout(applyTimers.get(tabId));
+        applyTimers.delete(tabId);
+    }
 });
 
 // --- Message Handling ---

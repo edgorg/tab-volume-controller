@@ -21,14 +21,6 @@ let currentTabIds = [];
 let savedSitesCollapsed = true;
 let lastAudioTabs = []; // Cache to pass to renderSavedSites without re-fetching
 
-// --- Utility: HTML escaping to prevent XSS ---
-function escapeHtml(str) {
-    if (!str) return "";
-    const div = document.createElement("div");
-    div.textContent = str;
-    return div.innerHTML;
-}
-
 // --- Debounced save to avoid write pressure during slider drag ---
 let saveTimeout = null;
 function debouncedSaveSettings() {
@@ -54,7 +46,7 @@ async function loadSettings() {
     presetsEnabled = data.presetsEnabled !== false;
     tabVolumes = data.tabVolumes || {};
     sitePresets = data.sitePresets || {};
-    savedSitesCollapsed = data.savedSitesCollapsed || false;
+    savedSitesCollapsed = data.savedSitesCollapsed === true;
     boostCheckbox.checked = boostEnabled;
     superBoostCheckbox.checked = superBoostEnabled;
     presetsCheckbox.checked = presetsEnabled;
@@ -153,40 +145,54 @@ function createTabRow(tab) {
 
     const row = document.createElement("div");
     row.className = "tab-row";
+    row.title = "Double-click to switch to tab";
 
     const percentDisplay = Math.round(settings.volume * 100);
-    const safeTitle = escapeHtml(tab.title);
     const fallbackIcon = chrome.runtime.getURL("icons/icon16-light.png");
 
-    row.innerHTML = `
-    <img 
-      class="tab-favicon" 
-      src="${tab.favIconUrl || fallbackIcon}" 
-      alt=""
-      onerror="this.src='${fallbackIcon}'"
-    >
-    <div class="tab-info">
-      <div class="tab-title" title="${safeTitle}">${safeTitle}</div>
-      <div class="slider-row">
-        <input
-         type="range"
-         class="volume-slider"
-         min="0"
-         max="${maxValue * 100}" 
-         value="${settings.volume * 100}"
-         aria-label="Volume for ${safeTitle}"
-        >
-        <span class="volume-label">${percentDisplay}%</span>
-      </div>
-    </div>
-    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}" aria-label="${settings.muted ? "Unmute" : "Mute"} ${safeTitle}">
-    </button>
-  `;
+    // Build DOM safely — no innerHTML with dynamic data
+    const favicon = document.createElement("img");
+    favicon.className = "tab-favicon";
+    favicon.src = tab.favIconUrl || fallbackIcon;
+    favicon.alt = "";
+    favicon.addEventListener("error", () => { favicon.src = fallbackIcon; });
 
-    // Get references to interactive elements
-    const slider = row.querySelector(".volume-slider");
-    const label = row.querySelector(".volume-label");
-    const muteBtn = row.querySelector(".mute-btn");
+    const tabInfo = document.createElement("div");
+    tabInfo.className = "tab-info";
+
+    const tabTitle = document.createElement("div");
+    tabTitle.className = "tab-title";
+    tabTitle.title = tab.title || "";
+    tabTitle.textContent = tab.title || "";
+
+    const sliderRow = document.createElement("div");
+    sliderRow.className = "slider-row";
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.className = "volume-slider";
+    slider.min = "0";
+    slider.max = String(maxValue * 100);
+    slider.value = String(settings.volume * 100);
+    slider.setAttribute("aria-label", `Volume for ${tab.title || ""}`);
+
+    const label = document.createElement("span");
+    label.className = "volume-label";
+    label.textContent = `${percentDisplay}%`;
+
+    sliderRow.appendChild(slider);
+    sliderRow.appendChild(label);
+    tabInfo.appendChild(tabTitle);
+    tabInfo.appendChild(sliderRow);
+
+    const muteBtn = document.createElement("button");
+    muteBtn.className = "mute-btn";
+    muteBtn.title = settings.muted ? "Unmute" : "Mute";
+    muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${tab.title || ""}`);
+
+    row.appendChild(favicon);
+    row.appendChild(tabInfo);
+    row.appendChild(muteBtn);
 
     // Update slider fill colour
     function updateSliderFill() {
@@ -235,7 +241,7 @@ function createTabRow(tab) {
         tabVolumes[tab.id] = settings;
         muteBtn.replaceChildren(getVolumeIcon(settings.volume, settings.muted));
         muteBtn.title = settings.muted ? "Unmute" : "Mute";
-        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${safeTitle}`);
+        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${tab.title || ""}`);
 
         // Save as site preset
         if (hostname && presetsEnabled) {
@@ -255,6 +261,7 @@ function createTabRow(tab) {
     row.addEventListener("dblclick", () => {
         chrome.tabs.update(tab.id, { active: true });
         chrome.tabs.get(tab.id, (t) => {
+            if (chrome.runtime.lastError) return;
             if (t.windowId) {
                 chrome.windows.update(t.windowId, { focused: true });
             }
@@ -279,40 +286,57 @@ function createSavedSiteRow(hostname, preset) {
 
     const percentDisplay = Math.round(settings.volume * 100);
     const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=32`;
-    const safeHostname = escapeHtml(hostname);
     const fallbackIcon = chrome.runtime.getURL("icons/icon16-light.png");
 
-    row.innerHTML = `
-    <img 
-      class="saved-site-favicon" 
-      src="${faviconUrl}" 
-      alt=""
-      onerror="this.src='${fallbackIcon}'"
-    >
-    <div class="saved-site-info">
-      <div class="saved-site-hostname" title="${safeHostname}">${safeHostname}</div>
-      <div class="slider-row">
-        <input
-         type="range"
-         class="volume-slider"
-         min="0"
-         max="${maxValue * 100}" 
-         value="${settings.volume * 100}"
-         aria-label="Volume for ${safeHostname}"
-        >
-        <span class="volume-label">${percentDisplay}%</span>
-      </div>
-    </div>
-    <button class="mute-btn" title="${settings.muted ? "Unmute" : "Mute"}" aria-label="${settings.muted ? "Unmute" : "Mute"} ${safeHostname}">
-    </button>
-    <button class="delete-preset-btn" title="Remove saved preset" aria-label="Remove preset for ${safeHostname}">
-    </button>
-  `;
+    // Build DOM safely — no innerHTML with dynamic data
+    const favicon = document.createElement("img");
+    favicon.className = "saved-site-favicon";
+    favicon.src = faviconUrl;
+    favicon.alt = "";
+    favicon.addEventListener("error", () => { favicon.src = fallbackIcon; });
 
-    const slider = row.querySelector(".volume-slider");
-    const label = row.querySelector(".volume-label");
-    const muteBtn = row.querySelector(".mute-btn");
-    const deleteBtn = row.querySelector(".delete-preset-btn");
+    const siteInfo = document.createElement("div");
+    siteInfo.className = "saved-site-info";
+
+    const hostnameEl = document.createElement("div");
+    hostnameEl.className = "saved-site-hostname";
+    hostnameEl.title = hostname;
+    hostnameEl.textContent = hostname;
+
+    const sliderRow = document.createElement("div");
+    sliderRow.className = "slider-row";
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.className = "volume-slider";
+    slider.min = "0";
+    slider.max = String(maxValue * 100);
+    slider.value = String(settings.volume * 100);
+    slider.setAttribute("aria-label", `Volume for ${hostname}`);
+
+    const label = document.createElement("span");
+    label.className = "volume-label";
+    label.textContent = `${percentDisplay}%`;
+
+    sliderRow.appendChild(slider);
+    sliderRow.appendChild(label);
+    siteInfo.appendChild(hostnameEl);
+    siteInfo.appendChild(sliderRow);
+
+    const muteBtn = document.createElement("button");
+    muteBtn.className = "mute-btn";
+    muteBtn.title = settings.muted ? "Unmute" : "Mute";
+    muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${hostname}`);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "delete-preset-btn";
+    deleteBtn.title = "Remove saved preset";
+    deleteBtn.setAttribute("aria-label", `Remove preset for ${hostname}`);
+
+    row.appendChild(favicon);
+    row.appendChild(siteInfo);
+    row.appendChild(muteBtn);
+    row.appendChild(deleteBtn);
 
     // Update slider fill
     function updateSliderFill() {
@@ -353,7 +377,7 @@ function createSavedSiteRow(hostname, preset) {
         sitePresets[hostname] = { volume: settings.volume, muted: settings.muted };
         muteBtn.replaceChildren(getVolumeIcon(settings.volume, settings.muted));
         muteBtn.title = settings.muted ? "Unmute" : "Mute";
-        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${safeHostname}`);
+        muteBtn.setAttribute("aria-label", `${settings.muted ? "Unmute" : "Mute"} ${hostname}`);
 
         // Also update any active tabs with this hostname
         applyPresetToActiveTabs(hostname, settings);
@@ -500,7 +524,7 @@ async function refreshTabs(force = false) {
     });
 }
 
-// Reset all tabs to 100%
+// Reset all tabs and site presets to 100%
 function resetAll() {
     chrome.runtime.sendMessage({ type: "GET_AUDIO_TABS" }, (tabs) => {
         const allTabs = tabs || [];
@@ -520,6 +544,9 @@ function resetAll() {
                 muted: false
             });
         });
+
+        // Also clear all saved site presets
+        sitePresets = {};
 
         saveSettings();
         refreshTabs(true);
